@@ -1,3 +1,4 @@
+# Core API stack – prefer packages with prebuilt wheels
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
@@ -14,8 +15,8 @@ aiofiles==24.1.0
 jinja2==3.1.5
 pyyaml==6.0.2
 tenacity==9.0.0
-orjson==3.10.12
-# Tool SDKs (best-effort – versions pinned loosely)
-garak>=0.10.0
-deepteam
-# promptmap, pyrit etc. installed in Dockerfile with fallbacks
+# orjson intentionally omitted – can require Rust on some platforms; stdlib json is fine
+
+# NOTE: garak / deepteam / pyrit / promptmap are installed in the Dockerfile
+# in separate best-effort steps so a missing binary wheel does not fail the whole image.
+
