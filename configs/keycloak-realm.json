@@ -1,0 +1,73 @@
+{
+  "realm": "lsap",
+  "enabled": true,
+  "displayName": "LLM Security Assessment Platform",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "roles": {
+    "realm": [
+      {"name": "admin", "description": "Full platform administration"},
+      {"name": "analyst", "description": "Can create and view assessments"},
+      {"name": "viewer", "description": "Read-only access to results"}
+    ]
+  },
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@lsap.local",
+      "firstName": "Platform",
+      "lastName": "Admin",
+      "credentials": [{"type": "password", "value": "admin123", "temporary": false}],
+      "realmRoles": ["admin", "analyst"]
+    },
+    {
+      "username": "analyst",
+      "enabled": true,
+      "email": "analyst@lsap.local",
+      "firstName": "Security",
+      "lastName": "Analyst",
+      "credentials": [{"type": "password", "value": "analyst123", "temporary": false}],
+      "realmRoles": ["analyst"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "lsap-frontend",
+      "name": "LSAP Frontend",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*",
+        "http://localhost:3000",
+        "*"
+      ],
+      "webOrigins": ["http://localhost:3000", "http://127.0.0.1:3000", "*"],
+      "protocol": "openid-connect",
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "lsap-backend",
+      "name": "LSAP Backend",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "backend-secret-change-me",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    }
+  ],
+  "browserSecurityHeaders": {
+    "contentSecurityPolicy": "frame-src 'self'; frame-ancestors 'self'; object-src 'none';"
+  }
+}

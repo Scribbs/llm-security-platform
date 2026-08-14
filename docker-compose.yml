@@ -1,0 +1,149 @@
+services:
+  # ----------------------------------------------------------------
+  # Infrastructure
+  # ----------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lsap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lsap_secure_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-lsap}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lsap}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - lsap-net
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - lsap-net
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-lsap}
+      KC_DB_USERNAME: ${POSTGRES_USER:-lsap}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-lsap_secure_pass}
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_PORT: 8080
+    volumes:
+      - ./configs/keycloak-realm.json:/opt/keycloak/data/import/lsap-realm.json:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+    networks:
+      - lsap-net
+
+  # ----------------------------------------------------------------
+  # Application
+  # ----------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-lsap}:${POSTGRES_PASSWORD:-lsap_secure_pass}@postgres:5432/${POSTGRES_DB:-lsap}
+      REDIS_URL: redis://redis:6379/0
+      RESULTS_DIR: /results
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-lsap}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-lsap-frontend}
+    volumes:
+      - results_data:/results
+      - ./backend/app:/app/app:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - lsap-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-http://localhost:8080}
+        VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-lsap}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-lsap-frontend}
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+      - keycloak
+    networks:
+      - lsap-net
+
+  # ----------------------------------------------------------------
+  # Tool runners (optional dedicated containers – can also run inside backend)
+  # ----------------------------------------------------------------
+  garak-runner:
+    build:
+      context: ./tools/garak
+      dockerfile: Dockerfile
+    volumes:
+      - results_data:/results
+    environment:
+      RESULTS_DIR: /results
+    networks:
+      - lsap-net
+    profiles: ["tools"]
+
+  deepteam-runner:
+    build:
+      context: ./tools/deepteam
+      dockerfile: Dockerfile
+    volumes:
+      - results_data:/results
+    environment:
+      RESULTS_DIR: /results
+    networks:
+      - lsap-net
+    profiles: ["tools"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  results_data:
+
+networks:
+  lsap-net:
+    driver: bridge
